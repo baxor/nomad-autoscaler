@@ -21,6 +21,7 @@ const (
 	keyQuery              = "query"
 	keyEvaluationInterval = "evaluation_interval"
 	keyTarget             = "target"
+	keyChecks             = "check"
 	keyStrategy           = "strategy"
 	keyCooldown           = "cooldown"
 )
@@ -37,7 +38,7 @@ type Source struct {
 }
 
 // NewNomadSource returns a new Nomad policy source.
-func NewNomadSource(log hclog.Logger, nomad *api.Client, config *policy.ConfigDefaults) policy.Source {
+func NewNomadSource(log hclog.Logger, nomad *api.Client, config *policy.ConfigDefaults) *Source {
 	return &Source{
 		log:    log.Named("nomad_policy_source"),
 		nomad:  nomad,
@@ -190,15 +191,6 @@ func (s *Source) canonicalizePolicy(p *policy.Policy) {
 		p.Cooldown = s.config.DefaultCooldown
 	}
 
-	// Set default values for Strategy.
-	if p.Strategy == nil {
-		p.Strategy = &policy.Strategy{}
-	}
-
-	if p.Strategy.Config == nil {
-		p.Strategy.Config = make(map[string]string)
-	}
-
 	// Set default values for Target.
 	if p.Target == nil {
 		p.Target = &policy.Target{}
@@ -212,16 +204,31 @@ func (s *Source) canonicalizePolicy(p *policy.Policy) {
 		p.Target.Config = make(map[string]string)
 	}
 
+	for _, c := range p.Checks {
+		canonicalizeCheck(c, p.Target)
+	}
+}
+
+func canonicalizeCheck(c *policy.Check, t *policy.Target) {
+	// Set default values for Strategy.
+	if c.Strategy == nil {
+		c.Strategy = &policy.Strategy{}
+	}
+
+	if c.Strategy.Config == nil {
+		c.Strategy.Config = make(map[string]string)
+	}
+
 	// Default source to the Nomad APM.
-	if p.Source == "" {
-		p.Source = plugins.InternalAPMNomad
+	if c.Source == "" {
+		c.Source = plugins.InternalAPMNomad
 	}
 
 	// Expand short Nomad APM query from <op>_<metric> into <op>_<metric>/<group>/<job>.
 	// <job> must be the last element so we can parse the query correctly
 	// since Nomad allows "/" in job IDs.
-	if p.Source == plugins.InternalAPMNomad && isShortQuery(p.Query) {
-		p.Query = fmt.Sprintf("%s/%s/%s", p.Query, p.Target.Config["Group"], p.Target.Config["Job"])
+	if c.Source == plugins.InternalAPMNomad && isShortQuery(c.Query) {
+		c.Query = fmt.Sprintf("%s/%s/%s", c.Query, t.Config["Group"], t.Config["Job"])
 	}
 }
 

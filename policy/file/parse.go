@@ -7,27 +7,31 @@ import (
 	"github.com/hashicorp/nomad-autoscaler/policy"
 )
 
-func decodeFile(file string, p *policy.ClusterScalingPolicy) error {
+func decodeFile(file string, p *policy.Policy) error {
 
-	if err := hclsimple.DecodeFile(file, nil, p); err != nil {
+	decodePolicy := &policy.FileDecodePolicy{}
+
+	if err := hclsimple.DecodeFile(file, nil, decodePolicy); err != nil {
 		return err
 	}
 
-	if p.Policy.CooldownHCL != "" {
-		d, err := time.ParseDuration(p.Policy.CooldownHCL)
+	if decodePolicy.Doc.CooldownHCL != "" {
+		d, err := time.ParseDuration(decodePolicy.Doc.CooldownHCL)
 		if err != nil {
 			return err
 		}
-		p.Policy.Cooldown = d
+		decodePolicy.Doc.Cooldown = d
 	}
 
-	if p.Policy.EvaluationIntervalHCL != "" {
-		d, err := time.ParseDuration(p.Policy.EvaluationIntervalHCL)
+	if decodePolicy.Doc.EvaluationIntervalHCL != "" {
+		d, err := time.ParseDuration(decodePolicy.Doc.EvaluationIntervalHCL)
 		if err != nil {
 			return err
 		}
-		p.Policy.EvaluationInterval = d
+		decodePolicy.Doc.EvaluationInterval = d
 	}
+
+	decodePolicy.Translate(p)
 
 	return nil
 }

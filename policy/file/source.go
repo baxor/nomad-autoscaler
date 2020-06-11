@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/davecgh/go-spew/spew"
-
 	hclog "github.com/hashicorp/go-hclog"
 	multierror "github.com/hashicorp/go-multierror"
 	fileHelper "github.com/hashicorp/nomad-autoscaler/helper/file"
@@ -17,7 +15,7 @@ import (
 )
 
 // Ensure NomadSource satisfies the Source interface.
-//var _ policy.Source = (*Source)(nil)
+var _ policy.Source = (*Source)(nil)
 
 type Source struct {
 	config *policy.ConfigDefaults
@@ -48,7 +46,7 @@ type Source struct {
 
 type filePolicy struct {
 	file   string
-	policy *policy.ClusterScalingPolicy
+	policy *policy.Policy
 }
 
 func NewFileSource(log hclog.Logger, cfg *policy.ConfigDefaults, dir string, reloadCh chan bool) policy.Source {
@@ -95,23 +93,23 @@ func (s *Source) MonitorIDs(ctx context.Context, resultCh chan<- policy.IDMessag
 }
 
 func (s *Source) MonitorPolicy(ctx context.Context, ID policy.PolicyID, resultCh chan<- policy.Policy, errCh chan<- error) {
-	log := s.log.With("policy_id", ID)
 
 	// Close channels when done with the monitoring loop.
 	defer close(resultCh)
 	defer close(errCh)
 
+	log := s.log.With("policy_id", ID)
 	log.Trace("starting file policy watcher")
 
-	//
+	// There isn't a possibility that I can think of where this call wouldn't
+	// be ok. Nevertheless check it to be safe before sending the policy to the
+	// handler which starts the evaluation ticker.
 	val, ok := s.policyMap[ID]
 	if !ok {
 		errCh <- fmt.Errorf("failed to get policy")
 	} else {
-		//resultCh <- val
+		resultCh <- *val.policy
 	}
-
-	spew.Dump(val)
 
 	for {
 		select {
@@ -129,26 +127,28 @@ func (s *Source) MonitorPolicy(ctx context.Context, ID policy.PolicyID, resultCh
 			// A non-nil policy indicates a change, therefore we send this to
 			// the handler.
 			if newPolicy != nil {
-				//resultCh <- newPolicy
+				resultCh <- *newPolicy
 			}
 		}
 	}
 }
 
-func (s *Source) retrievePolicy(ID policy.PolicyID) (*policy.ClusterScalingPolicy, error) {
+func (s *Source) retrievePolicy(ID policy.PolicyID) (*policy.Policy, error) {
 
 	val, ok := s.policyMap[ID]
 	if !ok {
 		return nil, errors.New("policy not found within internal store")
 	}
 
-	newPolicy := policy.ClusterScalingPolicy{}
+	var newPolicy policy.Policy
 
 	if err := decodeFile(val.file, &newPolicy); err != nil {
 		return nil, fmt.Errorf("failed to decode file %s: %v", val.file, err)
 	}
 	newPolicy.ID = ID.String()
 
+	// Check the new policy against the stored. If they are the same, and
+	// therefore the policy has not changed indicate that to the caller.
 	if md5Sum(newPolicy) == md5Sum(val) {
 		return nil, nil
 	}
@@ -182,7 +182,7 @@ func (s *Source) handleDir() ([]policy.PolicyID, error) {
 
 		policyID := s.getFilePolicyID(file)
 
-		var scalingPolicy policy.ClusterScalingPolicy
+		var scalingPolicy policy.Policy
 
 		// We have to decode the file to check whether the policy is enabled or
 		// not.
@@ -208,9 +208,9 @@ func (s *Source) handleDir() ([]policy.PolicyID, error) {
 	return policyIDs, mErr.ErrorOrNil()
 }
 
-func (s *Source) decodePolicyFromFile(file string) (*policy.ClusterScalingPolicy, error) {
+func (s *Source) decodePolicyFromFile(file string) (*policy.Policy, error) {
 
-	var filePolicy policy.ClusterScalingPolicy
+	var filePolicy policy.Policy
 
 	if err := decodeFile(file, &filePolicy); err != nil {
 		return nil, fmt.Errorf("failed to decode file %s: %v", file, err)

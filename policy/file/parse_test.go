@@ -11,55 +11,51 @@ import (
 func Test_decodeFile(t *testing.T) {
 	testCases := []struct {
 		inputFile            string
-		inputPolicy          *policy.ClusterScalingPolicy
-		expectedOutputPolicy *policy.ClusterScalingPolicy
+		inputPolicy          *policy.Policy
+		expectedOutputPolicy *policy.Policy
 		expectedOutputError  error
 		name                 string
 	}{
 		{
 			inputFile:   "./test-fixtures/full-cluster-policy.hcl",
-			inputPolicy: &policy.ClusterScalingPolicy{},
-			expectedOutputPolicy: &policy.ClusterScalingPolicy{
-				ID:      "",
-				Enabled: true,
-				Min:     10,
-				Max:     100,
-				Policy: &policy.ClusterScalingPolicyDoc{
-					Cooldown:              10 * time.Minute,
-					CooldownHCL:           "10m",
-					EvaluationInterval:    1 * time.Minute,
-					EvaluationIntervalHCL: "1m",
-					Checks: []*policy.ClusterScalingCheck{
-						{
-							Name:      "cpu_nomad",
-							APMSource: "nomad_apm",
-							APMQuery:  "cpu_high-memory",
-							Strategy: &policy.Strategy{
-								Name: "target-value",
-								Config: map[string]string{
-									"target": "80",
-								},
-							},
-						},
-						{
-							Name:      "memory_prom",
-							APMSource: "prometheus",
-							APMQuery:  "nomad_client_allocated_memory * 100 / (nomad_client_allocated_memory + nomad_client_unallocated_memory)",
-							Strategy: &policy.Strategy{
-								Name: "target-value",
-								Config: map[string]string{
-									"target": "80",
-								},
+			inputPolicy: &policy.Policy{},
+			expectedOutputPolicy: &policy.Policy{
+				ID:                 "",
+				Enabled:            true,
+				Min:                10,
+				Max:                100,
+				Cooldown:           10 * time.Minute,
+				EvaluationInterval: 1 * time.Minute,
+				Checks: []*policy.Check{
+					{
+						Name:   "cpu_nomad",
+						Source: "nomad_apm",
+						Query:  "cpu_high-memory",
+						Strategy: &policy.Strategy{
+							Name: "target-value",
+							Config: map[string]string{
+								"target": "80",
 							},
 						},
 					},
-					Target: &policy.Target{
-						Name: "aws-asg",
-						Config: map[string]string{
-							"asg_name":       "my-target-asg",
-							"class":          "high-memory",
-							"drain_deadline": "15m",
+					{
+						Name:   "memory_prom",
+						Source: "prometheus",
+						Query:  "nomad_client_allocated_memory * 100 / (nomad_client_allocated_memory + nomad_client_unallocated_memory)",
+						Strategy: &policy.Strategy{
+							Name: "target-value",
+							Config: map[string]string{
+								"target": "80",
+							},
 						},
+					},
+				},
+				Target: &policy.Target{
+					Name: "aws-asg",
+					Config: map[string]string{
+						"asg_name":       "my-target-asg",
+						"class":          "high-memory",
+						"drain_deadline": "15m",
 					},
 				},
 			},

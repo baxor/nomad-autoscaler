@@ -2,6 +2,7 @@ package nomad
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hashicorp/nomad-autoscaler/policy"
 
@@ -13,9 +14,11 @@ import (
 // from Nomad.
 //
 // The Nomad client and the agent can be configured by passing a cb function.
-func TestNomadSource(t *testing.T, cb func(*api.Config, *policy.ConfigDefaults)) policy.Source {
+func TestNomadSource(t *testing.T, cb func(*api.Config, *policy.ConfigDefaults)) *Source {
 	nomadConfig := api.DefaultConfig()
-	sourceConfig := &policy.ConfigDefaults{}
+	sourceConfig := &policy.ConfigDefaults{
+		DefaultEvaluationInterval: 10 * time.Second,
+	}
 
 	if cb != nil {
 		cb(nomadConfig, sourceConfig)
