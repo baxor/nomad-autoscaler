@@ -14,7 +14,7 @@ import (
 // Manager tracks policies and controls the lifecycle of each policy handler.
 type Manager struct {
 	log           hclog.Logger
-	policySource  Source
+	policySource  map[SourceName]Source
 	pluginManager *manager.PluginManager
 
 	// lock is used to synchronize parallel access to the maps below.
@@ -28,7 +28,7 @@ type Manager struct {
 }
 
 // NewManager returns a new Manager.
-func NewManager(log hclog.Logger, ps Source, pm *manager.PluginManager) *Manager {
+func NewManager(log hclog.Logger, ps map[SourceName]Source, pm *manager.PluginManager) *Manager {
 	return &Manager{
 		log:           log.Named("policy_manager"),
 		policySource:  ps,
@@ -43,7 +43,7 @@ func NewManager(log hclog.Logger, ps Source, pm *manager.PluginManager) *Manager
 func (m *Manager) Run(ctx context.Context, evalCh chan<- *Evaluation) {
 	defer m.stopHandlers()
 
-	policyIDsCh := make(chan []PolicyID)
+	policyIDsCh := make(chan IDMessage)
 	policyIDsErrCh := make(chan error)
 
 	// Create a separate context so we can stop the goroutine monitoring the
@@ -52,7 +52,9 @@ func (m *Manager) Run(ctx context.Context, evalCh chan<- *Evaluation) {
 	defer cancel()
 
 	// Start the policy source and listen for changes in the list of policy IDs
-	go m.policySource.MonitorIDs(monitorCtx, policyIDsCh, policyIDsErrCh)
+	for _, s := range m.policySource {
+		go s.MonitorIDs(monitorCtx, policyIDsCh, policyIDsErrCh)
+	}
 
 LOOP:
 	for {
@@ -69,7 +71,7 @@ LOOP:
 			continue
 
 		case policyIDs := <-policyIDsCh:
-			m.log.Trace(fmt.Sprintf("detected %d policies", len(policyIDs)))
+			m.log.Trace(fmt.Sprintf("detected %d policies", len(policyIDs.IDs)))
 
 			m.lock.Lock()
 
@@ -78,7 +80,7 @@ LOOP:
 			m.keep = make(map[PolicyID]bool)
 
 			// Iterate over policy IDs and create new handlers if necessary
-			for _, policyID := range policyIDs {
+			for _, policyID := range policyIDs.IDs {
 
 				// Mark policy as must-keep so it doesn't get removed.
 				m.keep[policyID] = true
@@ -93,11 +95,7 @@ LOOP:
 				// the policy for changes.
 				m.log.Trace("creating new handler", "policy_id", policyID)
 
-				h := NewHandler(
-					policyID,
-					m.log.ResetNamed(""),
-					m.pluginManager,
-					m.policySource)
+				h := NewHandler(policyID, m.log.ResetNamed(""), m.pluginManager, m.policySource[policyIDs.Source])
 				m.handlers[policyID] = h
 
 				go func(ID PolicyID) {

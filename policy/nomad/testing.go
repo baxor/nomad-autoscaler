@@ -3,6 +3,8 @@ package nomad
 import (
 	"testing"
 
+	"github.com/hashicorp/nomad-autoscaler/policy"
+
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/api"
 )
@@ -11,9 +13,9 @@ import (
 // from Nomad.
 //
 // The Nomad client and the agent can be configured by passing a cb function.
-func TestNomadSource(t *testing.T, cb func(*api.Config, *SourceConfig)) *Source {
+func TestNomadSource(t *testing.T, cb func(*api.Config, *policy.ConfigDefaults)) policy.Source {
 	nomadConfig := api.DefaultConfig()
-	sourceConfig := &SourceConfig{}
+	sourceConfig := &policy.ConfigDefaults{}
 
 	if cb != nil {
 		cb(nomadConfig, sourceConfig)

@@ -28,30 +28,16 @@ const (
 // Ensure NomadSource satisfies the Source interface.
 var _ policy.Source = (*Source)(nil)
 
-// SourceConfig holds configuration values for the Nomad source.
-type SourceConfig struct {
-	DefaultEvaluationInterval time.Duration
-	DefaultCooldown           time.Duration
-}
-
-func (c *SourceConfig) canonicalize() {
-	if c.DefaultEvaluationInterval == 0 {
-		c.DefaultEvaluationInterval = policy.DefaultEvaluationInterval
-	}
-}
-
 // Source is an implementation of the Source interface that retrieves
 // policies from a Nomad cluster.
 type Source struct {
 	log    hclog.Logger
 	nomad  *api.Client
-	config *SourceConfig
+	config *policy.ConfigDefaults
 }
 
 // NewNomadSource returns a new Nomad policy source.
-func NewNomadSource(log hclog.Logger, nomad *api.Client, config *SourceConfig) *Source {
-	config.canonicalize()
-
+func NewNomadSource(log hclog.Logger, nomad *api.Client, config *policy.ConfigDefaults) policy.Source {
 	return &Source{
 		log:    log.Named("nomad_policy_source"),
 		nomad:  nomad,
@@ -64,7 +50,7 @@ func NewNomadSource(log hclog.Logger, nomad *api.Client, config *SourceConfig) *
 // errCh channel.
 //
 // This function blocks until the context is closed.
-func (s *Source) MonitorIDs(ctx context.Context, resultCh chan<- []policy.PolicyID, errCh chan<- error) {
+func (s *Source) MonitorIDs(ctx context.Context, resultCh chan<- policy.IDMessage, errCh chan<- error) {
 	s.log.Debug("starting policy blocking query watcher")
 
 	q := &api.QueryOptions{WaitTime: 5 * time.Minute, WaitIndex: 1}
@@ -116,7 +102,7 @@ func (s *Source) MonitorIDs(ctx context.Context, resultCh chan<- []policy.Policy
 			q.WaitIndex = meta.LastIndex
 
 			// Send new policy IDs in the channel.
-			resultCh <- policyIDs
+			resultCh <- policy.IDMessage{IDs: policyIDs, Source: policy.SourceNameNomad}
 		}
 	}
 }
