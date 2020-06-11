@@ -39,16 +39,28 @@ type Evaluation struct {
 	TargetStatus *target.Status
 }
 
-// FileDecodePolicy
+// Apply applies the config defaults to the policy where the operator does not
+// supply the parameter.
+func (p *Policy) ApplyDefaults(d *ConfigDefaults) {
+	if p.Cooldown == 0 {
+		p.Cooldown = d.DefaultCooldown
+	}
+	if p.EvaluationInterval == 0 {
+		p.EvaluationInterval = d.DefaultEvaluationInterval
+	}
+}
+
+// FileDecodePolicy is used as an intermediate step when decoding a policy from
+// a file. It is needed because the internal Policy object is flattened when
+// compared to the literal HCL version. Therefore we cannot translate into the
+// internal struct but use this.
 type FileDecodePolicy struct {
-	ID      string
 	Enabled bool                 `hcl:"enabled,optional"`
 	Min     int64                `hcl:"min,optional"`
 	Max     int64                `hcl:"max"`
 	Doc     *FileDecodePolicyDoc `hcl:"policy,block"`
 }
 
-// FileDecodePolicyDoc
 type FileDecodePolicyDoc struct {
 	Cooldown              time.Duration
 	CooldownHCL           string `hcl:"cooldown,optional"`
@@ -58,8 +70,9 @@ type FileDecodePolicyDoc struct {
 	Target                *Target  `hcl:"target,block"`
 }
 
+// Translate all values from the decoded policy file into our internal policy
+// object.
 func (fpd *FileDecodePolicy) Translate(p *Policy) {
-	p.ID = fpd.ID
 	p.Min = fpd.Min
 	p.Max = fpd.Max
 	p.Enabled = fpd.Enabled

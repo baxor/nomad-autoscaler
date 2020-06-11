@@ -11,11 +11,15 @@ type ConfigDefaults struct {
 	DefaultCooldown           time.Duration
 }
 
-// Source is the interface that must be implemented by backends which
-// provide the canonical source for scaling policies.
+// Source is the interface that must be implemented by backends which provide
+// the canonical source for scaling policies.
 type Source interface {
 	MonitorIDs(ctx context.Context, resultCh chan<- IDMessage, errCh chan<- error)
 	MonitorPolicy(ctx context.Context, ID PolicyID, resultCh chan<- Policy, errCh chan<- error)
+
+	// Name returns the SourceName for the implementation. This helps handlers
+	// identify the source implementation which is responsible for policies.
+	Name() SourceName
 }
 
 type PolicyID string

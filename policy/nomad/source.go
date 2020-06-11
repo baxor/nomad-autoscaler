@@ -40,10 +40,15 @@ type Source struct {
 // NewNomadSource returns a new Nomad policy source.
 func NewNomadSource(log hclog.Logger, nomad *api.Client, config *policy.ConfigDefaults) *Source {
 	return &Source{
-		log:    log.Named("nomad_policy_source"),
+		log:    log.ResetNamed("nomad_policy_source"),
 		nomad:  nomad,
 		config: config,
 	}
+}
+
+// Name satisfies the Name function of the policy.Source interface.
+func (s *Source) Name() policy.SourceName {
+	return policy.SourceNameNomad
 }
 
 // MonitorIDs retrieves a list of policy IDs from a Nomad cluster and sends it
@@ -103,7 +108,7 @@ func (s *Source) MonitorIDs(ctx context.Context, resultCh chan<- policy.IDMessag
 			q.WaitIndex = meta.LastIndex
 
 			// Send new policy IDs in the channel.
-			resultCh <- policy.IDMessage{IDs: policyIDs, Source: policy.SourceNameNomad}
+			resultCh <- policy.IDMessage{IDs: policyIDs, Source: s.Name()}
 		}
 	}
 }

@@ -31,6 +31,8 @@ func decodeFile(file string, p *policy.Policy) error {
 		decodePolicy.Doc.EvaluationInterval = d
 	}
 
+	// Translate from our intermediate struct, to our internal flattened
+	// policy.
 	decodePolicy.Translate(p)
 
 	return nil

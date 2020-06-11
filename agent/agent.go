@@ -14,6 +14,7 @@ import (
 	targetpkg "github.com/hashicorp/nomad-autoscaler/plugins/target"
 	"github.com/hashicorp/nomad-autoscaler/policy"
 	filePolicy "github.com/hashicorp/nomad-autoscaler/policy/file"
+	nomadPolicy "github.com/hashicorp/nomad-autoscaler/policy/nomad"
 	"github.com/hashicorp/nomad/api"
 )
 
@@ -83,10 +84,17 @@ func (a *Agent) setupPolicyManager() chan *policy.Evaluation {
 		DefaultEvaluationInterval: a.config.DefaultEvaluationInterval,
 	}
 
+	// Setup our initial default policy source which is Nomad.
 	sources := map[policy.SourceName]policy.Source{
-		//policy.SourceNameNomad: nomadpolicy.NewNomadSource(a.logger, a.nomadClient, sourceConfig),
-		policy.SourceNameFile: filePolicy.NewFileSource(a.logger, sourceConfig, "/Users/jrasell/go/src/github.com/hashicorp/nomad-autoscaler/policy/file/test-fixtures", nil),
+		policy.SourceNameNomad: nomadPolicy.NewNomadSource(a.logger, a.nomadClient, sourceConfig),
 	}
+
+	// If the operators has configured a scaling policy directory to read from
+	// then setup the file source.
+	if a.config.Policy.Dir != "" {
+		sources[policy.SourceNameFile] = filePolicy.NewFileSource(a.logger, sourceConfig, a.config.Policy.Dir, make(chan bool))
+	}
+
 	a.policyManager = policy.NewManager(a.logger, sources, a.pluginManager)
 
 	return make(chan *policy.Evaluation, 10)

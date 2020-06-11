@@ -2,7 +2,6 @@ package policy
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +29,7 @@ type Manager struct {
 // NewManager returns a new Manager.
 func NewManager(log hclog.Logger, ps map[SourceName]Source, pm *manager.PluginManager) *Manager {
 	return &Manager{
-		log:           log.Named("policy_manager"),
+		log:           log.ResetNamed("policy_manager"),
 		policySource:  ps,
 		pluginManager: pm,
 		handlers:      make(map[PolicyID]*Handler),
@@ -43,8 +42,8 @@ func NewManager(log hclog.Logger, ps map[SourceName]Source, pm *manager.PluginMa
 func (m *Manager) Run(ctx context.Context, evalCh chan<- *Evaluation) {
 	defer m.stopHandlers()
 
-	policyIDsCh := make(chan IDMessage)
-	policyIDsErrCh := make(chan error)
+	policyIDsCh := make(chan IDMessage, 2)
+	policyIDsErrCh := make(chan error, 2)
 
 	// Create a separate context so we can stop the goroutine monitoring the
 	// list of policies independently from the parent context.
@@ -71,7 +70,8 @@ LOOP:
 			continue
 
 		case policyIDs := <-policyIDsCh:
-			m.log.Trace(fmt.Sprintf("detected %d policies", len(policyIDs.IDs)))
+			m.log.Trace("received policy IDs listing",
+				"num", len(policyIDs.IDs), "policy_source", policyIDs.Source)
 
 			m.lock.Lock()
 
@@ -87,15 +87,17 @@ LOOP:
 
 				// Check if we already have a handler for this policy.
 				if _, ok := m.handlers[policyID]; ok {
-					m.log.Trace("handler already exists")
+					m.log.Trace("handler already exists",
+						"policy_id", policyID, "policy_source", policyIDs.Source)
 					continue
 				}
 
 				// Create and store a new handler and use its channels to monitor
 				// the policy for changes.
-				m.log.Trace("creating new handler", "policy_id", policyID)
+				m.log.Trace("creating new handler",
+					"policy_id", policyID, "policy_source", policyIDs.Source)
 
-				h := NewHandler(policyID, m.log.ResetNamed(""), m.pluginManager, m.policySource[policyIDs.Source])
+				h := NewHandler(policyID, m.log, m.pluginManager, m.policySource[policyIDs.Source])
 				m.handlers[policyID] = h
 
 				go func(ID PolicyID) {
@@ -108,9 +110,10 @@ LOOP:
 				}(policyID)
 			}
 
-			// Remove and stop handlers for policies that don't exist anymore.
+			// Remove and stop handlers for policies that don't exist anymore
+			// for the source which manages them.
 			for k, h := range m.handlers {
-				if !m.keep[k] {
+				if !m.keep[k] && h.policySource.Name() == policyIDs.Source {
 					m.stopHandler(h)
 				}
 			}
